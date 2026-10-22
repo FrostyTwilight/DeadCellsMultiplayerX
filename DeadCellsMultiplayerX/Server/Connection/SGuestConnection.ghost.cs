@@ -1,7 +1,17 @@
 ﻿using dc;
+using dc.en;
+using dc.en.hero;
 using dc.libs.heaps.slib;
+using dc.libs.heaps.slib._AnimManager;
+using dc.tool.mainSkills;
 using DeadCellsMultiplayerX.Common.Data;
+using DeadCellsMultiplayerX.Common.Serializers;
+using DeadCellsMultiplayerX.Server.Events;
 using DeadCellsMultiplayerX.Utils;
+using Hashlink.Virtuals;
+using HaxeProxy.Runtime;
+using MessagePack.Formatters;
+using ModCore.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -11,38 +21,16 @@ namespace DeadCellsMultiplayerX.Server.Connection
 {
     internal partial class SGuestConnection
     {
-
-        private readonly Dictionary<nint, EntityInfo> entitiesInfo = [];
-        private readonly Dictionary<string, EntityInfo> guid2entityInfoLookup = [];
         private readonly Dictionary<nint, SpriteInfo> spritesInfo = [];
 
         private SpriteInfo GetSpriteInfo(HSprite spr)
         {
-            if(!spritesInfo.TryGetValue(spr.HashlinkPointer, out var result))
+            if (!spritesInfo.TryGetValue(spr.HashlinkPointer, out var result))
             {
                 result = new();
                 spritesInfo.Add(spr.HashlinkPointer, result);
             }
             return result;
-        }
-        private EntityInfo GetEntityInfo(Entity e)
-        {
-            if (!entitiesInfo.TryGetValue(e.HashlinkPointer, out var result))
-            {
-                result = new();
-                entitiesInfo.Add(e.HashlinkPointer, result);
-                guid2entityInfoLookup[result.GUID] = result;
-            }
-            return result;
-        }
-
-        private EntityInfo? GetEntityInfo(string guid)
-        {
-            if (guid2entityInfoLookup.TryGetValue(guid, out var result))
-            {
-                return result;
-            }
-            return null;
         }
 
         private void FillSpriteInfo(HSprite spr, string? parent, SpriteInfo inf)
@@ -51,19 +39,18 @@ namespace DeadCellsMultiplayerX.Server.Connection
             {
                 inf.AtlasName = atlasPath;
                 inf.GroupName = spr.groupName.ToString();
-                inf.Frame = spr.frame;
             }
 
-            inf.PivotData.Serialize(spr.pivot, typeof(SpritePivot));
+            inf.PivotData = DCMXSerializers.MessagePack.Serialize(spr?.pivot);
             inf.Parent = parent;
 
-            var children = spr.children;
+            var children = spr?.children;
 
             inf.Children.Clear();
-            for(int i = 0; i < children.length; i++)
+            for (int i = 0; i < children?.length; i++)
             {
                 var child = children.getDyn(i) as HSprite;
-                if(child == null)
+                if (child == null)
                 {
                     continue;
                 }
@@ -74,57 +61,78 @@ namespace DeadCellsMultiplayerX.Server.Connection
             }
         }
 
+        public void FillEntityAnimInfo(EntityInfo inf, HSprite spr)
+        {
+            var anim = spr.get_anim();
+            if (spr != null && anim != null && !anim.destroyed && anim.stack.length > 0)
+            {
+                var current = anim.stack.getDyn(0) as AnimInstance;
+                var transitions = anim.transitions;
+                if (current != null)
+                {
+                    AnimInfo info = new AnimInfo
+                    {
+                        Speed = current.speed,
+                        Paused = current.paused,
+                        Frame = spr.frame,
+                        Plays = current.plays,
+                        playDuration = current.playDuration,
+                    };
+
+                    if (transitions != null && inf.animInfo.AnimTransitions.Count == 0 && transitions.length > 0)
+                    {
+                        foreach (Transition data in transitions)
+                        {
+                            var tr = new AnimTransitions();
+                            tr.Anim = data.anim.ToString();
+                            tr.From = data.from.ToString();
+                            tr.To = data.to.ToString();
+                            tr.reverse = data.reverse;
+                            tr.speed = data.spd;
+
+                            inf.animInfo.AnimTransitions.Add(tr);
+                        }
+                    }
+                    inf.animInfo = info;
+                }
+            }
+        }
+
+        public void FillEntityGlowkeyData(Entity e, EntityInfo info)
+        {
+            var glow = (dc.shader.GlowKey)e.spr.getShader(dc.shader.GlowKey.Class);
+            if (info.GlowData.Count == 0 && glow != null)
+            {
+                var array = glow.getGlowDatas();
+                for (int i = 0; i < array.length; i++)
+                {
+                    var data = array.getDyn(i);
+                    var virtuals = ((HaxeProxyBase)data).ToVirtual<virtual_animationIntensity_animationScale_animationSpeed_animationTextureMask_inner_key_outer_power_>();
+                    info.GlowData.Add(i, DCMXSerializers.MessagePack.Serialize(virtuals));
+                }
+            }
+        }
+
         private void FillEntityInfo(Entity e, EntityInfo inf)
         {
             inf.TypeName = e.GetType().FullName;
 
-            inf.SubLevelId = e._level.GetSubLevelIndex();
-            inf.EntityData.Serialize(e, typeof(Entity));
+            if (!e.initDone) return;
 
-            if(e.spr != null)
+            inf.SubLevelId = e._level.GetSubLevelIndex();
+            inf.remoteTime = Session.CurrentTimeStamp;
+
+
+            if (e.spr != null)
             {
+                inf.PosVector = new PosVector(e.cx, e.cy, e.xr, e.yr, e.dir);
                 var sinfo = GetSpriteInfo(e.spr);
                 inf.MainSprite = sinfo;
                 FillSpriteInfo(e.spr, inf.GUID, sinfo);
+                FillEntityAnimInfo(inf, e.spr);
+                FillEntityGlowkeyData(e, inf);
             }
         }
 
-        private bool TryGetInfoIfVisable(Entity e, [NotNullWhen(true)] out EntityInfo? info)
-        {
-            if (lastRequest == null)
-            {
-                info = null;
-                return false;
-            }
-            var rect = lastRequest.Rect;
-            var rx = rect.X;
-            var ry = rect.Y;
-            var rxt = rect.X + rect.Width;
-            var ryt = rect.Y + rect.Height;
-            if (e.cx >= rx && e.cx <= rxt && e.cy >= ry && e.cy <= ryt && e.visible)
-            {
-                EntityInfo inf = GetEntityInfo(e);
-
-                e.isOnScreen = true;
-
-                inf.TypeName = e.GetType().FullName;
-
-                info = inf;
-                return true;
-            }
-            info = null;
-            return false;
-        }
-
-        private bool TryUpdateEntity(Entity e)
-        {
-            if (TryGetInfoIfVisable(e, out var inf))
-            {
-                FillEntityInfo(e, inf);
-                guest.UpdateEntity(inf);
-                return true;
-            }
-            return false;
-        }
     }
 }

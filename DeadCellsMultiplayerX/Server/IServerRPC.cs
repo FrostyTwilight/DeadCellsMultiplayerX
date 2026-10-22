@@ -1,5 +1,6 @@
 ﻿using DeadCellsMultiplayerX.Client;
 using DeadCellsMultiplayerX.Common.Data;
+using DeadCellsMultiplayerX.Common.Data.Snapshot;
 using PolyType;
 using StreamJsonRpc;
 using System;
@@ -45,14 +46,19 @@ namespace DeadCellsMultiplayerX.Server
         /// <param name="w"></param>
         /// <param name="h"></param>
         /// <returns></returns>
-        public Task<AreaInfo> RequestAreaInfo(AreaInfoRequest request);
+        public Task<byte[]> RequestAreaInfo(AreaInfoRequest request);
+
+        /// <summary>提交下一关的选择（投票）</summary>
+        /// <param name="vote">玩家的关卡选择</param>
+        public Task SubmitLevelVote(LevelVote vote);
 
         /// <summary>
-        /// 请求一个 Entity 信息
+        /// 客户端告诉服务端,选择的下一个关卡
         /// </summary>
-        /// <param name="guid"></param>
+        /// <param name="plyerid"></param>
+        /// <param name="levelid"></param>
         /// <returns></returns>
-        public Task<EntityInfo?> RequestEntityInfo(string guid);
+        public Task GusetEnterNextLevel(string plyerid, string levelid);
 
         /// <summary>
         /// 获取服务器时间
@@ -61,5 +67,22 @@ namespace DeadCellsMultiplayerX.Server
         public Task<long> GetTimeStamp();
 
         public Task<bool> CheckVersion(string version);
+
+        public Task Ping();
+
+        /// <summary>
+        /// 客户端每帧上传本地世界帧
+        /// </summary>
+        public Task UploadClientWorldFrame(ClientWorldFrame frame);
+
+        /// <summary>
+        /// 请求补发缺失的服务端世界帧;历史已淘汰时返回全量基线
+        /// </summary>
+        public Task<WorldFrameBundle> RequestWorldFrames(WorldFrameRangeRequest request);
+
+        /// <summary>
+        /// 请求全量世界基线
+        /// </summary>
+        public Task<WorldResync> RequestWorldResync(int knownEpoch);
     }
 }

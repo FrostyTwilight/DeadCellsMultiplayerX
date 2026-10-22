@@ -1,13 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using MessagePack;
 
 namespace DeadCellsMultiplayerX.Common.Data
 {
+    [MessagePackObject]
     public class AreaInfo
     {
-        public RectInt Rect { get; set; } = new();
-        public int[]? Collision { get; set; }
-        public List<EntityInfo> Entities { get; set; } = [];
+        [Key(0)] public RectInt Rect { get; set; } = new();
+        [Key(1)] public int[]? Collision { get; set; }
+        [Key(2)] public List<EntityInfo> Entities { get; set; } = [];
     }
 }

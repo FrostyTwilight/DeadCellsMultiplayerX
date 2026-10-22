@@ -4,6 +4,8 @@ using dc.libs.heaps.slib;
 using DeadCellsMultiplayerX.Client;
 using DeadCellsMultiplayerX.Common;
 using DeadCellsMultiplayerX.Common.Data;
+using DeadCellsMultiplayerX.Common.Data.Snapshot;
+using DeadCellsMultiplayerX.Common.Serializers;
 using DeadCellsMultiplayerX.Utils;
 using ModCore.Utilities;
 using System;
@@ -15,7 +17,7 @@ namespace DeadCellsMultiplayerX.Server.Connection
 {
     internal partial class SGuestConnection : IServerRPC
     {
-
+        private int transitionGate = 0;
 
         public Task<bool> CheckVersion(string version)
         {
@@ -70,7 +72,7 @@ namespace DeadCellsMultiplayerX.Server.Connection
             return File.ReadAllBytes(Main.savePath);
         }
 
-        public async Task<AreaInfo> RequestAreaInfo(IServerRPC.AreaInfoRequest request)
+        public async Task<byte[]> RequestAreaInfo(IServerRPC.AreaInfoRequest request)
         {
             var rect = request.Rect;
             if (rect.X < 0)
@@ -113,39 +115,107 @@ namespace DeadCellsMultiplayerX.Server.Connection
 
                 foreach (Entity v in lvl.entities)
                 {
-                    if(v is Interactive)
+                    if (v is not Mob)
                     {
                         continue;
                     }
 
                     if (v.cx >= rx && v.cx <= rxt && v.cy >= ry && v.cy <= ryt && v.visible)
                     {
-                        EntityInfo inf = GetEntityInfo(v);
+                        // EntityInfo inf = worldXDataDirector.GetEntityByPointer(v.HashlinkPointer)!;
 
-                        v.isOnScreen = true;
+                        // if (inf != null)
+                        // {
+                        //     v.isOnScreen = true;
 
-                        FillEntityInfo(v, inf);
+                        //     FillEntityInfo(v, inf);
 
-                        areaInfo.Entities.Add(inf);
+                        //     areaInfo.Entities.Add(inf);
+                        // }
                     }
                 }
             }
 
-            return areaInfo;
+            // foreach (var item in await Session.GetGuestsHeroInfos())
+            // {
+            //     item.remoteTime = Session.CurrentTimeStamp;
+            //     areaInfo.Entities.Add(item);
+            // }
+
+            return DCMXSerializers.MessagePack.Serialize(areaInfo);
         }
 
 
+        public Task<long> GetTimeStamp() => Task.FromResult(Session.CurrentTimeStamp);
 
-        public Task<EntityInfo?> RequestEntityInfo(string guid)
+
+        public async Task GusetEnterNextLevel(string plyerid, string levelid)
         {
-            return Task.FromResult(GetEntityInfo(guid));
+            if (Session.GuestsGameInfo[plyerid].LevelSelected)
+                return;
+
+            Session.GuestsGameInfo[plyerid].NextLevelID = levelid;
+            Session.GuestsGameInfo[plyerid].LevelSelected = true;
+
+            if (Interlocked.CompareExchange(ref transitionGate, 1, 0) != 0)
+                return;
+
+            while (!Session.GuestsGameInfo.All(e => e.Value.LevelSelected))
+            {
+                await Task.Delay(100);
+            }
+
+            var selectedLevelIds = Session.GuestsGameInfo
+                .Select(e => e.Value.NextLevelID)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
+                .ToList();
+
+            string resultLevelId;
+
+            if (selectedLevelIds.Count == 1)
+            {
+                resultLevelId = selectedLevelIds[0];
+            }
+            else
+            {
+                int index = System.Random.Shared.Next(selectedLevelIds.Count);
+                resultLevelId = selectedLevelIds[index];
+            }
+
+
+            try
+            {
+                await Session.NoticeGuestsEnterNextLevel(resultLevelId);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref transitionGate, 0);
+            }
         }
 
-        public Task<long> GetTimeStamp()
+        public Task SubmitLevelVote(LevelVote info)
         {
-            return Task.FromResult(Session.CurrentTimeStamp);
+            Session.GuestsGameInfo[info.PlyerID] = info;
+            return Task.CompletedTask;
         }
 
+        public Task Ping() => Task.CompletedTask;
 
+        public Task UploadClientWorldFrame(ClientWorldFrame frame)
+        {
+            Session.ClientFrames.OnFrame(GuestInfo.Guid, frame);
+            return Task.CompletedTask;
+        }
+
+        public Task<WorldFrameBundle> RequestWorldFrames(WorldFrameRangeRequest request)
+        {
+            return Task.FromResult(Session.Broadcaster.GetFrames(request, Session.CurrentTimeStamp));
+        }
+
+        public Task<WorldResync> RequestWorldResync(int knownEpoch)
+        {
+            return Task.FromResult(Session.Broadcaster.BuildResync(Session.CurrentTimeStamp));
+        }
     }
 }

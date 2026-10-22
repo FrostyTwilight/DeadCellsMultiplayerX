@@ -1,0 +1,33 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: DeadCellsMultiplayerX\n"
+"POT-Creation-Date: 2025-11-29 12:26+0800\n"
+"PO-Revision-Date: 2025-11-29 12:27+0800\n"
+"Last-Translator: Your Name <your@email.com>\n"
+"Language-Team: Chinese\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.2\n"
+"X-Poedit-Basepath: ../../../ModCore\n"
+"X-Poedit-SearchPath-0: .\n"
+
+
+msgid "ModName"
+msgstr "DeadCellsMultiplayerX"
+
+msgid "ModDescription"
+msgstr ""
+
+msgid "Lang_Online"
+msgstr "在线"
+
+msgid "CreateRoom"
+msgstr "创建房间"
+
+msgid "JoinRoom"
+msgstr "加入房间"
+
+msgid "return"
+msgstr "返回"

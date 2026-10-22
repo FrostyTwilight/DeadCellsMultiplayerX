@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using DeadCellsMultiplayerX.Common.Data;
 
 namespace DeadCellsMultiplayerX.Client
 {
@@ -28,6 +29,11 @@ namespace DeadCellsMultiplayerX.Client
         /// 房间 Host
         /// </summary>
         public string Owner { get; set; } = "";
+
+        /// <summary>
+        /// 游戏模式
+        /// </summary>
+        public GameMode GameMode { get; set; } = GameMode.None;
     }
 
     /// <summary>
@@ -58,6 +64,14 @@ namespace DeadCellsMultiplayerX.Client
         /// <summary>
         /// 是否已连接服务器
         /// </summary>
-        public bool IsConnectedServer { get; set; } = false; 
+        public bool IsConnectedServer { get; set; } = false;
+
+        /// <summary>
+        /// 玩家皮肤
+        /// </summary>
+        public string SkinMould { get; set; } = string.Empty;
+
+
+        public GuestInfo Clone() => (GuestInfo) MemberwiseClone();
     }
 }

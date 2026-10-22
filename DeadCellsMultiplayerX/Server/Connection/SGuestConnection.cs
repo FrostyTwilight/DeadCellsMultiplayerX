@@ -1,4 +1,5 @@
 ﻿using dc;
+using dc.en;
 using dc.libs.heaps.slib;
 using DeadCellsMultiplayerX.Client;
 using DeadCellsMultiplayerX.Client.Guest;
@@ -6,6 +7,7 @@ using DeadCellsMultiplayerX.Client.Host;
 using DeadCellsMultiplayerX.Client.Networks;
 using DeadCellsMultiplayerX.Common;
 using DeadCellsMultiplayerX.Common.Data;
+using DeadCellsMultiplayerX.Common.Data.Snapshot;
 using DeadCellsMultiplayerX.Server.Events;
 using DeadCellsMultiplayerX.Utils;
 using Hashlink.Virtuals;
@@ -32,7 +34,7 @@ namespace DeadCellsMultiplayerX.Server.Connection
         IOnEntitySetGlowData,
         IOnEntityDisposed
     {
-        
+
 
         private IServerRPC.AreaInfoRequest? lastRequest;
 
@@ -43,7 +45,7 @@ namespace DeadCellsMultiplayerX.Server.Connection
         public ServerSession Session { get; }
         public ServerMainThread Main => Session.Main;
         public IGuestRPC guest;
-
+        private bool EnterNewLevelEnd { get; set; } = false;
 
         public SGuestConnection(ServerSession session, Stream connection)
         {
@@ -53,6 +55,7 @@ namespace DeadCellsMultiplayerX.Server.Connection
             rpc = connection.CreateJsonRpc();
 
             rpc.AddLocalRpcTarget(this);
+            
 
             guest = rpc.Attach<IGuestRPC>();
 
@@ -77,10 +80,35 @@ namespace DeadCellsMultiplayerX.Server.Connection
 
         protected override void MyDispose()
         {
+            Session.RemoveGuest(this);
+
             base.MyDispose();
 
             rpc?.Dispose();
         }
+
+        /// <summary>广播一帧世界快照(不阻塞游戏线程)。</summary>
+        public void PushWorldFrame(WorldFrame frame)
+        {
+            if (IsDisposed || rpc.IsDisposed) return;
+
+            try
+            {
+                var task = guest.SyncWorldFrame(frame);
+                _ = task.ContinueWith(
+                    t => Logger.Warning(t.Exception, "SyncWorldFrame failed"),
+                    TaskContinuationOptions.OnlyOnFaulted);
+            }
+            catch (Exception ex)
+            {
+                // 同步序列化/连接异常不能冒泡到广播循环,否则会打断整个服务端 tick
+                Logger.Warning(ex, "SyncWorldFrame failed (sync)");
+            }
+        }
+
+        /// <summary>向该客户端请求补发上传帧。</summary>
+        public Task<ClientFrameBundle> RequestClientFrames(ClientFrameRangeRequest request)
+            => guest.RequestClientFrames(request);
 
 
 
@@ -89,30 +117,28 @@ namespace DeadCellsMultiplayerX.Server.Connection
             Debug.Assert(Main.savePath != null);
 
             guest.EnterNewLevel(File.ReadAllBytes(Main.savePath));
+
+            EnterNewLevelEnd = true;
+
+            EventSystem.BroadcastEvent<IOnHeroInitDone, Hero>(Game.Instance.HeroInstance!);
         }
 
         void IOnEntitySetColorMap.OnEntitySetColorMap(IOnEntitySetColorMap.Data data)
         {
-            var info = GetEntityInfo(data.Entity);
-            info.ColorMapSkin = data.Skin;
-            info.ColorMapModel = data.Model;
-
-            Logger.Information("Set colormap: {guid} {model} {skin}", info.GUID, info.ColorMapModel, info.ColorMapSkin);
+           
         }
 
         void IOnEntitySetGlowData.OnEntitySetGlowData(IOnEntitySetGlowData.Data data)
         {
-            var info = GetEntityInfo(data.Entity);
-
-            var gd = new virtual_animationIntensity_animationScale_animationSpeed_animationTextureMask_inner_key_outer_power_();
-            var gdd = new SimpleObjData();
-            gdd.Serialize(gd, null);
-            info.GlowData[data.Index] = gdd;
+            // var info = GetEntityInfo(data.Entity);
+            // info.GlowData[data.Index] = new byte[1024];
         }
 
         void IOnEntityDisposed.OnEntityDisposed(Entity e)
         {
             //entitiesInfo.Remove(e.HashlinkPointer);
         }
+
+
     }
 }

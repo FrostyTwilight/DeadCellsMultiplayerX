@@ -40,5 +40,23 @@ namespace DeadCellsMultiplayerX.Utils
             rpc.TraceSource.Listeners.Add(new ConsoleTraceListener(true));
             return rpc;
         }
+
+
+        public static async Task<string> ReadGuestGuidAsync(Stream stream)
+        {
+            const int GuidLength = 36;
+            var buf = new byte[GuidLength];
+            int read = 0;
+            while (read < GuidLength)
+            {
+                int n = await stream.ReadAsync(buf.AsMemory(read, GuidLength - read))
+                                    .ConfigureAwait(false);
+                if (n == 0)
+                    throw new EndOfStreamException(
+                        $"Stream ended while reading guest GUID ({read}/{GuidLength} bytes).");
+                read += n;
+            }
+            return Encoding.UTF8.GetString(buf);
+        }
     }
 }

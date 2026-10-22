@@ -74,10 +74,17 @@ namespace DeadCellsMultiplayerX.Client.Host
             return Task.FromResult(host.LobbyInfo);
         }
 
+
         public void SetName(string name)
         {
             Logger.Information("Set name as '{name}'", guestInfo.Guid, name);
             guestInfo.Name = name;
+        }
+
+        public Task SetSkinMould(string skinMould)
+        {
+            guestInfo.SkinMould = skinMould;
+            return Task.CompletedTask;
         }
 
         public void Quit()
@@ -114,19 +121,26 @@ namespace DeadCellsMultiplayerX.Client.Host
             guestInfo.IsReady = ready;
         }
 
+        public Task Ping() => Task.CompletedTask;
+
+
         public Task<Stream> GetServerStream()
         {
-            if(!host.LobbyInfo.CanConnectServer ||
-                host.session == null)
-            {
+            if (!host.LobbyInfo.CanConnectServer || host.session == null)
                 throw new InvalidOperationException();
-            }
 
             Logger.Information("Connected server");
             channel = host.session.AllocNewChannel();
+            var stream = channel.AsStream();
+
+            //写入客户guid
+            var guidBytes = System.Text.Encoding.UTF8.GetBytes(guestInfo.Guid);
+            Debug.Assert(guidBytes.Length == 36);
+            stream.Write(guidBytes, 0, guidBytes.Length);
+            stream.Flush();
 
             Debug.Assert(IsConnectedServer);
-            return Task.FromResult(channel.AsStream());
+            return Task.FromResult(stream);
         }
 
         //
@@ -145,7 +159,7 @@ namespace DeadCellsMultiplayerX.Client.Host
                 ), DisposeToken
                 ).ContinueWith(_ =>
                 {
-                    if(!IsConnectedServer)
+                    if (!IsConnectedServer)
                     {
                         Logger.Error("Failed to connect server. Timeout.");
                         Dispose();
@@ -153,6 +167,5 @@ namespace DeadCellsMultiplayerX.Client.Host
                 });
         }
 
-        
     }
 }

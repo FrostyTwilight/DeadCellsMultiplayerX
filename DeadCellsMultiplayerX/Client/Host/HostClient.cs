@@ -30,6 +30,7 @@ namespace DeadCellsMultiplayerX.Client.Host
         /// </summary>
         public LobbyInfo LobbyInfo { get; set; } = new();
 
+
         /// <summary>
         /// 是否可以开始游戏
         /// </summary>
@@ -136,7 +137,7 @@ namespace DeadCellsMultiplayerX.Client.Host
         protected override void MyDispose()
         {
             base.MyDispose();
-
+            acceptGuestsCancelSource.Cancel();
             listener.Dispose();
             session?.Dispose();
             session = null;

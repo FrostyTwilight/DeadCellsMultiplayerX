@@ -18,6 +18,7 @@ namespace DeadCellsMultiplayerX
         /// 保存自定义按键
         /// </summary>
         public Dictionary<int, CoreLibrary.Utilities.ContorlLbleKeyConfig> ControlKeys { get; set; } = new();
-        
+
+        public int currentMode { get; set; } =0;
     }
 }
